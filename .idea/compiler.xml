@@ -7,6 +7,7 @@
         <sourceTestOutputDir name="target/generated-test-sources/test-annotations" />
         <outputRelativeToContentRoot value="true" />
         <module name="camel-netty-http-app" />
+        <module name="camel-netty-http-custom" />
       </profile>
     </annotationProcessing>
   </component>
