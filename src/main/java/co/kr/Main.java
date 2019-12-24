@@ -58,10 +58,11 @@ public class Main{
                 restConfiguration().component("netty-http").host("localhost").port(5000).enableCORS(true).bindingMode(RestBindingMode.auto);
 
                 rest().produces("application/json")
-                        .get("/admin").route().transform().constant("[{ \"id\":\"1\", \"name\":\"Scott\" },{ \"id\":\"2\", \"name\":\"Claus\" }]").endRest() //case 1
-                        .get("/A/{id}").route().transform().simple("{ \"id\":\"${header.id}\", \"name\":\"Scott\" }").endRest()                           //case 2
+                        .get("/A").route().transform().constant("[{ \"id\":\"${header.id}\", \"name\":\"Scott\" },{ \"id\":\"2\", \"name\":\"Claus\" }]").endRest() //case 1
+                        .get("/admin").route().transform().constant("[{ \"id\":\"${header.id}\", \"name\":\"Scott\" },{ \"id\":\"2\", \"name\":\"Claus\" }]").endRest() //case 1
+                        .get("/admin/{id}}").route().transform().constant("[{ \"id\":\"${header.id}\", \"name\":\"Scott\" },{ \"id\":\"2\", \"name\":\"Claus\" }]").endRest() //case 1
+                        .get("/guest/{id}").route().transform().simple("{ \"id\":\"${header.id}\", \"name\":\"Scott\" }").endRest()                           //case 2
                         .get("/public/{id}").route().transform().simple("{ \"id\":\"${header.id}\", \"name\":\"Scott\" }").endRest()                           //case 2
-
                         .get("/restrict/c").route().transform().simple("{ \"id\":\"${header.id}\", \"name\":\"Scott\" }").endRest()                           //case 2
 
                         .post("/A/D/{id}").consumes("application/json").type(UserPojoEx.class).to("bean:beanTestClass")   //case 3
@@ -122,13 +123,12 @@ public class Main{
         SecurityConstraintMapping matcher = new SecurityConstraintMapping();
 
         /* private  */
-        matcher.addInclusion("/*"    ,"*");
-        matcher.addInclusion("/admin","admin");
-        matcher.addInclusion("/guest","admin,guest");
+        matcher.addInclusion("/*"      ,"*");           //모든 사용자 접속 가능
+        matcher.addInclusion("/admin/*","admin");       // admin 밑의 url은 해당 사용자만
+        matcher.addInclusion("/guest/*","admin,guest"); // guest 밑의 url은 해동 사용자만
 
         /* public  */
         matcher.addExclusion("/public/*");
-
 
         security.setSecurityConstraint(matcher);
         return security;
