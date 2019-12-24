@@ -39,7 +39,7 @@
     </appender>
 
     <!-- root Logback -->
-    <root level="INFO">
+    <root level="TRACE">
         <appender-ref ref="ASYNC" />
     </root>
 </configuration>

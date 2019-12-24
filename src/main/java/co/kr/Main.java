@@ -11,8 +11,7 @@ import org.apache.camel.Processor;
 import org.apache.camel.builder.RouteBuilder;
 import org.apache.camel.component.jackson.JacksonDataFormat;
 import org.apache.camel.component.log.LogComponent;
-import org.apache.camel.component.netty.http.NettyHttpComponent;
-import org.apache.camel.component.netty.http.RestNettyHttpBinding;
+import org.apache.camel.component.netty.http.*;
 import org.apache.camel.impl.DefaultCamelContext;
 import org.apache.camel.model.dataformat.JsonDataFormat;
 import org.apache.camel.model.dataformat.JsonLibrary;
@@ -28,6 +27,9 @@ import static org.apache.camel.model.dataformat.JsonLibrary.Gson;
 public class Main{
     public static void main(String[] args) throws Exception {
         final Logger logger = LoggerFactory.getLogger(Main.class);
+
+        /** auth관리를 위한 셋팅 파일 설정 */
+        System.setProperty("java.security.auth.login.config", "src/main/resources/myjaas.config");
 
         //component 선언
         CamelContext context                  = new DefaultCamelContext(new SimpleRegistry());
@@ -46,16 +48,22 @@ public class Main{
         /* camel context 셋팅 */
         //context.setLogMask(false);
 
+        /** netty http setting */
+        nettyHttpComponent.setSecurityConfiguration(getHttpSecurity());
 
         context.addRoutes(new RouteBuilder() {
             @Override
             public void configure() throws Exception {
                 //restConfiguration().component("netty-http").host("localhost").port(5000).enableCORS(true).endpointProperty("nettyHttpBinding", "#mybinding");
-                restConfiguration().component("netty-http").host("localhost").port(5000).enableCORS(true).bindingMode(RestBindingMode.auto);;
+                restConfiguration().component("netty-http").host("localhost").port(5000).enableCORS(true).bindingMode(RestBindingMode.auto);
 
                 rest().produces("application/json")
-                        .get("/A").route().transform().constant("[{ \"id\":\"1\", \"name\":\"Scott\" },{ \"id\":\"2\", \"name\":\"Claus\" }]").endRest() //case 1
+                        .get("/admin").route().transform().constant("[{ \"id\":\"1\", \"name\":\"Scott\" },{ \"id\":\"2\", \"name\":\"Claus\" }]").endRest() //case 1
                         .get("/A/{id}").route().transform().simple("{ \"id\":\"${header.id}\", \"name\":\"Scott\" }").endRest()                           //case 2
+                        .get("/public/{id}").route().transform().simple("{ \"id\":\"${header.id}\", \"name\":\"Scott\" }").endRest()                           //case 2
+
+                        .get("/restrict/c").route().transform().simple("{ \"id\":\"${header.id}\", \"name\":\"Scott\" }").endRest()                           //case 2
+
                         .post("/A/D/{id}").consumes("application/json").type(UserPojoEx.class).to("bean:beanTestClass")   //case 3
                 ;
                 /*
@@ -72,6 +80,13 @@ public class Main{
                                             console.log( msg );
                                         });
                  */
+
+                /*
+                from("netty-http:http://0.0.0.0:{{port}}/foo?matchOnUriPrefix=true&securityConfiguration=#mySecurityConfig")
+                        .to("mock:input")
+                        .transform().constant("Bye World");
+                        */
+
 
 
                    /*.to("log:server-input")
@@ -94,6 +109,30 @@ public class Main{
         jsondf.setAllowUnmarshallType(true);
         jsondf.setUnmarshalType(UserPojoEx.class);
         return jsondf;
+    }
+
+    public static NettyHttpSecurityConfiguration getHttpSecurity(){
+        /** netty component setting */
+        NettyHttpSecurityConfiguration security = new NettyHttpSecurityConfiguration();
+        security.setRealm("karaf");
+        SecurityAuthenticator auth = new JAASSecurityAuthenticator();
+        auth.setName("karaf");
+        security.setSecurityAuthenticator(auth);
+
+        SecurityConstraintMapping matcher = new SecurityConstraintMapping();
+
+        /* private  */
+        matcher.addInclusion("/*"    ,"*");
+        matcher.addInclusion("/admin","admin");
+        matcher.addInclusion("/guest","admin,guest");
+
+        /* public  */
+        matcher.addExclusion("/public/*");
+
+
+        security.setSecurityConstraint(matcher);
+        return security;
+
     }
 }
 
@@ -148,4 +187,6 @@ class BeanTestClass{
         ex.getIn().setBody(bodyData);
     }
 }
+
+
 
