@@ -49,7 +49,7 @@ public class Main{
         //context.setLogMask(false);
 
         /** netty http setting */
-        nettyHttpComponent.setSecurityConfiguration(getHttpSecurity());
+        nettyHttpComponent.setSecurityConfiguration(getHttpSecurity()); //인가 셋팅
 
         context.addRoutes(new RouteBuilder() {
             @Override
@@ -58,19 +58,20 @@ public class Main{
                 restConfiguration().component("netty-http").host("localhost").port(5000).enableCORS(true).bindingMode(RestBindingMode.auto);
 
                 rest().produces("application/json")
-                        .get("/A").route().transform().constant("[{ \"id\":\"${header.id}\", \"name\":\"Scott\" },{ \"id\":\"2\", \"name\":\"Claus\" }]").endRest() //case 1
-                        .get("/admin").route().transform().constant("[{ \"id\":\"${header.id}\", \"name\":\"Scott\" },{ \"id\":\"2\", \"name\":\"Claus\" }]").endRest() //case 1
-                        .get("/admin/{id}}").route().transform().constant("[{ \"id\":\"${header.id}\", \"name\":\"Scott\" },{ \"id\":\"2\", \"name\":\"Claus\" }]").endRest() //case 1
-                        .get("/guest/{id}").route().transform().simple("{ \"id\":\"${header.id}\", \"name\":\"Scott\" }").endRest()                           //case 2
-                        .get("/public/{id}").route().transform().simple("{ \"id\":\"${header.id}\", \"name\":\"Scott\" }").endRest()                           //case 2
-                        .get("/restrict/c").route().transform().simple("{ \"id\":\"${header.id}\", \"name\":\"Scott\" }").endRest()                           //case 2
+                        .get("/A").route().transform().constant("[{ \"id\":\"${header.id}\", \"name\":\"Scott\" },{ \"id\":\"2\", \"name\":\"Claus\" }]").endRest()
+                        .get("/admin").route().transform().constant("[{ \"id\":\"${header.id}\", \"name\":\"Scott\" },{ \"id\":\"2\", \"name\":\"Claus\" }]").log("${body}").endRest()
+                        .get("/admin/{id}}").route().transform().constant("[{ \"id\":\"${header.id}\", \"name\":\"Scott\" },{ \"id\":\"2\", \"name\":\"Claus\" }]").endRest()
+                        .get("/guest/{id}").route().transform().simple("{ \"id\":\"${header.id}\", \"name\":\"Scott\" }").endRest()
+                        .get("/public/{id}").route().transform().simple("{ \"id\":\"${header.id}\", \"name\":\"Scott\" }").endRest()
+                        .get("/restrict/c").route().transform().simple("{ \"id\":\"${header.id}\", \"name\":\"Scott\" }").endRest()
+                        .get("/logout").route().transform().simple("{ \"statusMsg\":\"ok\", \"statusCode\":\"200\" }").endRest()
 
-                        .post("/A/D/{id}").consumes("application/json").type(UserPojoEx.class).to("bean:beanTestClass")   //case 3
+                        .post("/D/E").consumes("application/json").type(UserPojoEx.class).to("bean:beanTestClass")   //case 3
                 ;
                 /*
                 case 3 call 테스트용
                 $.ajax({
-                        url : "http://localhost:5000/A/D/dddedede?id=111&name=abcd&active=true",
+                        url : "http://localhost:5000/D/E",
                         type: "post",
                         accept: "application/json",
                         contentType: "application/json; charset=utf-8",
@@ -123,11 +124,12 @@ public class Main{
         SecurityConstraintMapping matcher = new SecurityConstraintMapping();
 
         /* private  */
-        matcher.addInclusion("/*"      ,"*");           //모든 사용자 접속 가능
+        matcher.addInclusion("/*");           //모든 사용자 접속 가능
         matcher.addInclusion("/admin/*","admin");       // admin 밑의 url은 해당 사용자만
         matcher.addInclusion("/guest/*","admin,guest"); // guest 밑의 url은 해동 사용자만
 
         /* public  */
+        matcher.addExclusion("/D/E");
         matcher.addExclusion("/public/*");
 
         security.setSecurityConstraint(matcher);
