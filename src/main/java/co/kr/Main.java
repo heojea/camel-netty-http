@@ -28,8 +28,11 @@ public class Main{
     public static void main(String[] args) throws Exception {
         final Logger logger = LoggerFactory.getLogger(Main.class);
 
-        /** auth관리를 위한 셋팅 파일 설정 */
+        /** basic auth관리를 위한 셋팅 파일 설정 */
         System.setProperty("java.security.auth.login.config", "src/main/resources/myjaas.config");
+        /** spring xml 설정 파일 불러오기 */
+
+        //"/org/apache/camel/component/netty/http/SpringNettyHttpBasicAuthTest.xml"})
 
         //component 선언
         CamelContext context                  = new DefaultCamelContext(new SimpleRegistry());
@@ -49,7 +52,10 @@ public class Main{
         //context.setLogMask(false);
 
         /** netty http setting */
-        nettyHttpComponent.setSecurityConfiguration(getHttpSecurity()); //인가 셋팅
+        //기본 인가방식중 제일 기본적인 인가 방식 소스확인중 미비상태
+        //nettyHttpComponent.setSecurityConfiguration(getHttpSecurity());
+
+
 
         context.addRoutes(new RouteBuilder() {
             @Override
@@ -64,10 +70,18 @@ public class Main{
                         .get("/guest/{id}").route().transform().simple("{ \"id\":\"${header.id}\", \"name\":\"Scott\" }").endRest()
                         .get("/public/{id}").route().transform().simple("{ \"id\":\"${header.id}\", \"name\":\"Scott\" }").endRest()
                         .get("/restrict/c").route().transform().simple("{ \"id\":\"${header.id}\", \"name\":\"Scott\" }").endRest()
-                        .get("/logout").route().transform().simple("{ \"statusMsg\":\"ok\", \"statusCode\":\"200\" }").endRest()
 
                         .post("/D/E").consumes("application/json").type(UserPojoEx.class).to("bean:beanTestClass")   //case 3
                 ;
+
+                rest("/user").tag("dude").description("User rest service")
+                        // setup security definitions
+                        .securityDefinitions()
+                        .oauth2("petstore_auth").authorizationUrl("http://petstore.swagger.io/oauth/dialog").end()
+                        .apiKey("api_key").withHeader("myHeader").end()
+                        .end()
+                        .consumes("application/json").produces("application/json")
+                        ;
                 /*
                 case 3 call 테스트용
                 $.ajax({
