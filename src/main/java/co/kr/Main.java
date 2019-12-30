@@ -1,9 +1,14 @@
 package co.kr;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+
+
+import com.google.api.client.googleapis.auth.oauth2.*;
+import com.google.api.client.http.javanet.NetHttpTransport;
+import com.google.api.client.json.jackson2.JacksonFactory;
+import com.google.api.services.calendar.CalendarScopes;
 import com.google.gson.Gson;
 import com.google.gson.JsonElement;
+import io.netty.handler.codec.http.HttpRequest;
 import org.apache.camel.CamelContext;
 import org.apache.camel.Exchange;
 import org.apache.camel.Handler;
@@ -21,12 +26,23 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.commons.lang3.builder.ReflectionToStringBuilder;
 
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileReader;
+import java.io.IOException;
+import java.util.Collections;
+
+import static com.sun.org.apache.xalan.internal.xsltc.compiler.Constants.REDIRECT_URI;
 import static org.apache.camel.model.dataformat.JsonLibrary.Gson;
 
 
 public class Main{
     public static void main(String[] args) throws Exception {
         final Logger logger = LoggerFactory.getLogger(Main.class);
+        final String CLIENT_KEY = "20707377534-k3e818kj8v7s3dbf9i0i3a5orasuuu6v.apps.googleusercontent.com";
+        final String SECURE_KEY = "5vVmwrdhcNjsCeOUupXOHTZN";
+        final String API_KEY    = "AIzaSyAXwVfoA-WBLj0BUGDNosJ1KjPLDDQQqQ4";
+        final String AUTH_URL   = "https://www.googleapis.com/oauth2/v4/token";
 
         /** basic auth관리를 위한 셋팅 파일 설정 */
         System.setProperty("java.security.auth.login.config", "src/main/resources/myjaas.config");
@@ -39,8 +55,12 @@ public class Main{
         NettyHttpComponent nettyHttpComponent = new NettyHttpComponent();
         LogComponent logComponent             = new LogComponent();
 
-        //register add
+        /** register add */
+        //common register
         context.getRegistry().bind("mybinding" , RestNettyHttpBinding.class);
+
+        //common bean register
+        context.getRegistry().bind("beanOauthC"    , new BeanOauthC());
         context.getRegistry().bind("beanTestClass" , new BeanTestClass());
 
 
@@ -71,17 +91,9 @@ public class Main{
                         .get("/public/{id}").route().transform().simple("{ \"id\":\"${header.id}\", \"name\":\"Scott\" }").endRest()
                         .get("/restrict/c").route().transform().simple("{ \"id\":\"${header.id}\", \"name\":\"Scott\" }").endRest()
 
-                        .post("/D/E").consumes("application/json").type(UserPojoEx.class).to("bean:beanTestClass")   //case 3
+                        .post("/D/E").consumes("application/json").type(UserPojoEx.class).to("bean:beanTestClass")  //case 3
+                        .post("/oauthTest").consumes("application/json").type(UserPojoEx.class).to("bean:beanOauthC")  //case 3
                 ;
-
-                rest("/user").tag("dude").description("User rest service")
-                        // setup security definitions
-                        .securityDefinitions()
-                        .oauth2("petstore_auth").authorizationUrl("http://petstore.swagger.io/oauth/dialog").end()
-                        .apiKey("api_key").withHeader("myHeader").end()
-                        .end()
-                        .consumes("application/json").produces("application/json")
-                        ;
                 /*
                 case 3 call 테스트용
                 $.ajax({
@@ -193,7 +205,7 @@ class LogPrintProcess implements Processor{
 class BeanTestClass{
     final Logger logger = LoggerFactory.getLogger(BeanTestClass.class);
 
-    public void doSomeThing(Exchange ex) throws JsonProcessingException {
+    public void doSomeThing(Exchange ex)  {
         UserPojoEx bodyData = ex.getIn().getBody(UserPojoEx.class);
         logger.info("Exchage ({})" ,bodyData.toString());
 
@@ -203,6 +215,69 @@ class BeanTestClass{
         ex.getIn().setBody(bodyData);
     }
 }
+
+
+class BeanOauthC{
+    final Logger logger = LoggerFactory.getLogger(BeanOauthC.class);
+
+    public void doSomeThingOauth(Exchange ex , HttpRequest req) throws IOException {
+
+        logger.info("X-Requested-With ({})", req.headers().get("X-Requested-With"));
+        String CLIENT_SECRET_FILE = "C:/workspace/camel-netty-http-custom/src/main/resources/client_secret_20707377534-k3e818kj8v7s3dbf9i0i3a5orasuuu6v.apps.googleusercontent.com.json";
+        GoogleClientSecrets clientSecrets = GoogleClientSecrets.load(JacksonFactory.getDefaultInstance() , new FileReader(CLIENT_SECRET_FILE));
+        NetHttpTransport netHttpTransport = new NetHttpTransport();
+
+        GoogleAuthorizationCodeFlow flow = new GoogleAuthorizationCodeFlow.Builder(
+                netHttpTransport,JacksonFactory.getDefaultInstance(),clientSecrets, Collections.singleton(CalendarScopes.CALENDAR)).build();
+
+
+        GoogleTokenResponse tokenResponse =
+                new GoogleAuthorizationCodeTokenRequest(
+                        netHttpTransport,
+                        JacksonFactory.getDefaultInstance(),
+                        GoogleOAuthConstants.TOKEN_SERVER_URL,  //"https://oauth2.googleapis.com/token",
+                        clientSecrets.getDetails().getClientId(),
+                        clientSecrets.getDetails().getClientSecret(),
+                        "AuthCode",
+                        REDIRECT_URI)  // Specify the same redirect URI that you use with your web
+                        // app. If you don't have a web version of your app, you can
+                        // specify an empty string.
+                        .execute();
+
+        //"https://oauth2-login-demo.appspot.com/code"
+
+
+
+
+        String accessToken = tokenResponse.getAccessToken();
+
+        // Use access token to call API
+        GoogleCredential credential = new GoogleCredential().setAccessToken(accessToken);
+        /*
+        Drive drive =
+                new Drive.Builder(new NetHttpTransport(), JacksonFactory.getDefaultInstance(), credential)
+                        .setApplicationName("Auth Code Exchange Demo")
+                        .build();
+        File file = drive.files().get("appfolder").execute();
+        */
+
+// Get profile info from ID token
+        GoogleIdToken idToken = tokenResponse.parseIdToken();
+        GoogleIdToken.Payload payload = idToken.getPayload();
+        String userId = payload.getSubject();  // Use this value as a key to identify a user.
+        String email = payload.getEmail();
+        boolean emailVerified = Boolean.valueOf(payload.getEmailVerified());
+        String name = (String) payload.get("name");
+        String pictureUrl = (String) payload.get("picture");
+        String locale = (String) payload.get("locale");
+        String familyName = (String) payload.get("family_name");
+        String givenName = (String) payload.get("given_name");
+
+        logger.info("class [{}] Exchage ({})",ex);
+
+    }
+}
+
 
 
 
