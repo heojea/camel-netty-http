@@ -2,9 +2,13 @@ package co.kr;
 
 
 
+import com.google.api.client.auth.oauth2.*;
+import com.google.api.client.extensions.java6.auth.oauth2.AuthorizationCodeInstalledApp;
 import com.google.api.client.googleapis.auth.oauth2.*;
+import com.google.api.client.http.GenericUrl;
 import com.google.api.client.http.javanet.NetHttpTransport;
 import com.google.api.client.json.jackson2.JacksonFactory;
+import com.google.api.client.util.Preconditions;
 import com.google.api.services.calendar.CalendarScopes;
 import com.google.gson.Gson;
 import com.google.gson.JsonElement;
@@ -30,6 +34,7 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.Collections;
 
 import static com.sun.org.apache.xalan.internal.xsltc.compiler.Constants.REDIRECT_URI;
@@ -62,6 +67,8 @@ public class Main{
         //common bean register
         context.getRegistry().bind("beanOauthC"    , new BeanOauthC());
         context.getRegistry().bind("beanTestClass" , new BeanTestClass());
+        context.getRegistry().bind("oauthRedirectBean" , new OauthRedirectBean());
+
 
 
         //component add
@@ -92,7 +99,8 @@ public class Main{
                         .get("/restrict/c").route().transform().simple("{ \"id\":\"${header.id}\", \"name\":\"Scott\" }").endRest()
 
                         .post("/D/E").consumes("application/json").type(UserPojoEx.class).to("bean:beanTestClass")  //case 3
-                        .post("/oauthTest").consumes("application/json").type(UserPojoEx.class).to("bean:beanOauthC")  //case 3
+                        .get("/oauthTest").consumes("application/json").to("bean:beanOauthC")  //case 3
+                        .get("/oauthRedirect").to("bean:oauthRedirectBean")
                 ;
                 /*
                 case 3 call 테스트용
@@ -216,21 +224,91 @@ class BeanTestClass{
     }
 }
 
+class OauthRedirectBean{
+    final Logger logger = LoggerFactory.getLogger(BeanTestClass.class);
+
+    public void doSomeThing(Exchange ex)  {
+        logger.info("Exchage ({})" ,ex);
+
+
+    }
+}
+
 
 class BeanOauthC{
     final Logger logger = LoggerFactory.getLogger(BeanOauthC.class);
-
     public void doSomeThingOauth(Exchange ex , HttpRequest req) throws IOException {
-
         logger.info("X-Requested-With ({})", req.headers().get("X-Requested-With"));
         String CLIENT_SECRET_FILE = "C:/workspace/camel-netty-http-custom/src/main/resources/client_secret_20707377534-k3e818kj8v7s3dbf9i0i3a5orasuuu6v.apps.googleusercontent.com.json";
-        GoogleClientSecrets clientSecrets = GoogleClientSecrets.load(JacksonFactory.getDefaultInstance() , new FileReader(CLIENT_SECRET_FILE));
         NetHttpTransport netHttpTransport = new NetHttpTransport();
+        GoogleClientSecrets clientSecrets = GoogleClientSecrets.load(JacksonFactory.getDefaultInstance() , new FileReader(CLIENT_SECRET_FILE));
 
+        Credential credential = this.authorize(clientSecrets , netHttpTransport);
+        String accessToken    = this.getOauthToken(clientSecrets , netHttpTransport).getAccessToken();
+
+
+        //String accessToken = tokenResponse.getAccessToken();
+
+        // Get profile info from ID token
+        /*
+        GoogleIdToken idToken = tokenResponse.parseIdToken();
+        GoogleIdToken.Payload payload = idToken.getPayload();
+        String userId = payload.getSubject();  // Use this value as a key to identify a user.
+        String email = payload.getEmail();
+        boolean emailVerified = Boolean.valueOf(payload.getEmailVerified());
+        String name = (String) payload.get("name");
+        String pictureUrl = (String) payload.get("picture");
+        String locale = (String) payload.get("locale");
+        String familyName = (String) payload.get("family_name");
+        String givenName = (String) payload.get("given_name");
+        */
+
+        logger.info("class [{}] Exchage ({})",ex);
+
+    }
+
+    public Credential authorize(final GoogleClientSecrets clientSecrets ,final NetHttpTransport netHttpTransport) throws IOException {
         GoogleAuthorizationCodeFlow flow = new GoogleAuthorizationCodeFlow.Builder(
-                netHttpTransport,JacksonFactory.getDefaultInstance(),clientSecrets, Collections.singleton(CalendarScopes.CALENDAR)).build();
+                netHttpTransport
+                ,JacksonFactory.getDefaultInstance()
+                ,clientSecrets
+                , Collections.singleton(CalendarScopes.CALENDAR))
+                .setScopes(Arrays.asList("read"))
+                .setAccessType("offline")
+                .build();
+        flow.loadCredential("user");
+        System.out.println(flow.loadCredential("user"));
+        System.out.println(flow);
+        return this.authorize(flow , "user");
+    }
 
+    public Credential authorize(final GoogleAuthorizationCodeFlow flow,final String userId) throws IOException {
+        try {
+            Credential credential = flow.loadCredential(userId);
+            if (credential != null
+                    && (credential.getRefreshToken() != null ||
+                    credential.getExpiresInSeconds() == null ||
+                    credential.getExpiresInSeconds() > 60)) {
+                return credential;
+            }
+            // open in browser
+            String redirectUri = "http://localhost:5000/oauthRedirect";
+            AuthorizationCodeRequestUrl authorizationUrl =
+                    flow.newAuthorizationUrl().setRedirectUri(redirectUri);
+            //onAuthorization(authorizationUrl);
+            // receive authorization code and exchange it for an access token
+            //String code = receiver.waitForCode();
+            //TokenResponse response = flow.newTokenRequest(code).setRedirectUri(redirectUri).execute();
+            // store credential and return it
+            //return flow.createAndStoreCredential(response, userId);
+            return credential;
+        } finally {
+            //receiver.stop();
+        }
 
+    }
+
+    public GoogleTokenResponse getOauthToken(final GoogleClientSecrets clientSecrets ,final NetHttpTransport netHttpTransport) throws IOException {
         GoogleTokenResponse tokenResponse =
                 new GoogleAuthorizationCodeTokenRequest(
                         netHttpTransport,
@@ -243,38 +321,7 @@ class BeanOauthC{
                         // app. If you don't have a web version of your app, you can
                         // specify an empty string.
                         .execute();
-
-        //"https://oauth2-login-demo.appspot.com/code"
-
-
-
-
-        String accessToken = tokenResponse.getAccessToken();
-
-        // Use access token to call API
-        GoogleCredential credential = new GoogleCredential().setAccessToken(accessToken);
-        /*
-        Drive drive =
-                new Drive.Builder(new NetHttpTransport(), JacksonFactory.getDefaultInstance(), credential)
-                        .setApplicationName("Auth Code Exchange Demo")
-                        .build();
-        File file = drive.files().get("appfolder").execute();
-        */
-
-// Get profile info from ID token
-        GoogleIdToken idToken = tokenResponse.parseIdToken();
-        GoogleIdToken.Payload payload = idToken.getPayload();
-        String userId = payload.getSubject();  // Use this value as a key to identify a user.
-        String email = payload.getEmail();
-        boolean emailVerified = Boolean.valueOf(payload.getEmailVerified());
-        String name = (String) payload.get("name");
-        String pictureUrl = (String) payload.get("picture");
-        String locale = (String) payload.get("locale");
-        String familyName = (String) payload.get("family_name");
-        String givenName = (String) payload.get("given_name");
-
-        logger.info("class [{}] Exchage ({})",ex);
-
+        return tokenResponse;
     }
 }
 

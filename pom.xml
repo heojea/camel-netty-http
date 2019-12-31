@@ -54,6 +54,13 @@
             <version>1.30.5</version>
         </dependency>
 
+        <!-- https://mvnrepository.com/artifact/com.google.api-client/google-api-client-java6 -->
+        <dependency>
+            <groupId>com.google.api-client</groupId>
+            <artifactId>google-api-client-java6</artifactId>
+            <version>1.30.6</version>
+        </dependency>
+
         <!-- https://mvnrepository.com/artifact/org.apache.camel/camel-example-netty-http -->
         <dependency>
             <groupId>javax.xml.bind</groupId>
